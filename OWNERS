@@ -1,37 +1,8 @@
 approvers:
-- aredenba-rh
-- ciaranRoche
-- crizzo71
-- jsell-rh
-- mbrudnoy
-- Mischulee
-- pnguyen44
-- rafabene
-- rh-amarin
-- Ruclo
-- tirthct
-- vkareh
-- kuudori
-- ma-hill
-- ldornele
-- sherine-k
-- mliptak0
-
+- e2e-owners
+- tech-leads
 reviewers:
-- aredenba-rh
-- ciaranRoche
-- crizzo71
-- jsell-rh
-- mbrudnoy
-- Mischulee
-- pnguyen44
-- rafabene
-- rh-amarin
-- Ruclo
-- tirthct
-- vkareh
-- kuudori
-- ma-hill
-- ldornele
-- sherine-k
-- mliptak0
+- e2e-reviewers
+- e2e-owners
+labels:
+- area/e2e

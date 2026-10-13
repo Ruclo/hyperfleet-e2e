@@ -1,0 +1,25 @@
+aliases:
+  e2e-owners:
+  - kuudori
+  - ma-hill
+  e2e-reviewers:
+  - pnguyen44
+  - tirthct
+  - Mischulee
+  - mliptak0
+  perf-owners:
+  - pnguyen44
+  - kuudori
+  perf-reviewers:
+  - tirthct
+  - ma-hill
+  tech-leads:
+  - ciaranRoche
+  - rafabene
+  - rh-amarin
+  tenancy-owners:
+  - pnguyen44
+  - mliptak0
+  tenancy-reviewers:
+  - kuudori
+  - Mischulee

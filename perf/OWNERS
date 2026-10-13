@@ -1,0 +1,7 @@
+approvers:
+- perf-owners
+reviewers:
+- perf-reviewers
+- perf-owners
+labels:
+- area/performance
