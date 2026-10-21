@@ -16,6 +16,7 @@ pkg/
 ├── client/             - HyperFleet API client (generic HTTP)
 │   └── kubernetes/     - Kubernetes client (client-go)
 ├── config/             - Configuration loading and validation
+├── descriptor/         - Entity metadata, catalog and path construction
 ├── e2e/                - Test execution engine (Ginkgo)
 ├── helper/             - Test helpers (pollers, matchers, resource management)
 ├── labels/             - Test label definitions
@@ -36,10 +37,10 @@ HyperFleet E2E creates ephemeral resources per test for complete isolation.
 ```text
 Test starts
   → Create new Helper instance (helper.New())
-  → GetTestCluster() creates cluster via API
+  → CreateTestResource() creates cluster via API
   → Poll for cluster Reconciled condition (pollers + matchers)
   → Execute test assertions
-  → CleanupTestCluster() deletes cluster and namespaces
+  → CleanupTestResource() deletes via the API; adapters remove downstream resources
 Test ends
 ```
 
@@ -127,23 +128,48 @@ Built-in Defaults (lowest priority)
 - Adapter deployment/uninstall via Helm
 
 **Key Types**:
-- `Helper` - Main struct with `Cfg`, `Client`, `K8sClient`, `AdapterDeploymentList`
+- `Helper` - Main struct with `Cfg`, `Entities`, `Client`, `K8sClient`, `AdapterDeploymentList`
 
 **Key Methods**:
 
-*Resource Management* (`helper.go`):
-- `GetTestCluster(ctx, payloadPath)` - Create temporary test cluster
-- `CleanupTestCluster(ctx, clusterID)` - Delete the cluster through the API and wait for hard-delete (404); the adapters remove the resources they created
-- `GetTestNodePool(ctx, clusterID, payloadPath)` - Create nodepool
+*Resource Management* (`resource.go`):
+- `CreateTestResource(ctx, entity, parentID, payloadPath)` - Create a temporary resource and return its ID
+- `CleanupTestResource(ctx, entity, parentID, resourceID)` - Delete through the API using the descriptor's cleanup policy
+- `DeferCleanup(entity, parentID, resourceID)` - Register warning-only cleanup in the current Ginkgo node
 
 *Pollers* (`pollers.go`) — thin functions returning current state for use with `Eventually`:
-- `PollCluster(ctx, id)` - Returns `(*Resource, error)`
-- `PollNodePool(ctx, clusterID, npID)` - Returns `(*Resource, error)`
-- `PollClusterAdapterStatuses(ctx, clusterID)` - Returns `(*AdapterStatusList, error)`
-- `PollNodePoolAdapterStatuses(ctx, clusterID, npID)` - Returns `(*AdapterStatusList, error)`
-- `PollClusterHTTPStatus(ctx, id)` - Returns HTTP status code (200/404)
-- `PollNodePoolHTTPStatus(ctx, clusterID, npID)` - Returns HTTP status code (200/404)
+- `Poll(ctx, entity, parentID, resourceID)` - Returns `(*Resource, error)`
+- `PollAdapterStatuses(ctx, entity, parentID, resourceID)` - Returns `(*AdapterStatusList, error)`
+- `PollHTTPStatus(ctx, entity, parentID, resourceID)` - Returns the HTTP status code
 - `PollNamespacesByPrefix(ctx, prefix)` - Returns `([]string, error)`
+
+Use an empty `parentID` for root resources. Child descriptors derive their nested
+path from their parent's plural. Resolve a known kind with
+`h.Entities.MustGet("Cluster")`; use `Lookup` for runtime input that can be unknown.
+
+The catalog is built after configuration has been resolved. `pkg/descriptor`
+owns the type, catalog and path construction, with no config or helper imports.
+The single table is `Config.entityDescriptors` in `pkg/config/descriptor.go`.
+Each row combines routing, cleanup and runtime settings; production rows read the
+existing resolved config fields and threshold constants directly. There is no
+second kind switch to update when adding a row.
+
+Fixture rows register routing and cleanup metadata. `Parent` and `CascadeChild`
+use a shared two-minute deletion timeout. The catalog rejects any row with
+`Cleanup.WaitForHardDelete` and a zero or negative `Timeouts.Deleted`, so invalid
+cleanup settings fail when the helper is constructed, before it creates resources.
+Rows that do not wait for hard-delete can leave that timeout unset. Fixture
+adapters, reconciliation timeouts and performance thresholds remain unset;
+registration alone does not deploy fixtures or establish performance baselines.
+
+Cleanup policy preserves existing behavior: Cluster and NodePool wait for 404,
+Channel explicitly deletes eligible Versions before itself, and WifConfig still
+tolerates conflicts during teardown. These are cleanup choices, not API deletion
+semantics. The API and adapters own downstream resource deletion.
+Hard-delete polling retains the existing deadline-between-requests loop and sleep
+interval. Requests use the caller's context; the cleanup timeout does not impose
+a new request deadline. Resource IDs are concatenated as before and passed to the
+client/API without new helper validation.
 
 *Custom Matchers* (`matchers.go`) — reusable Gomega matchers:
 - `HaveResourceCondition(condType, status)` - Matches `*Resource` with given condition
@@ -163,7 +189,7 @@ Built-in Defaults (lowest priority)
 - `VerifyConfigMap(ctx, ns, labels, annotations)` - ConfigMap exists with expected metadata
 
 *Adapter Operations* (`adapter.go`):
-- `DeployAdapter(ctx, opts)` - Deploy adapter via Helm upgrade --install
+- `DeployAdapter(ctx, opts)` - Deploy adapter via Helm upgrade --install; `opts.Entity` supplies its descriptor
 - `UninstallAdapter(ctx, releaseName, namespace)` - Uninstall adapter via Helm
 
 ### pkg/e2e
