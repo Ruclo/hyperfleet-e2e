@@ -231,7 +231,7 @@ var _ = ginkgo.Describe(
 				current, err := h.Client.GetCluster(ctx, clusterID)
 				Expect(err).NotTo(HaveOccurred(), "failed to get cluster %s", clusterID)
 				gateOn, err := h.Client.PatchCluster(ctx, clusterID, client.ResourcePatchRequest{
-					Labels: client.MergeLabels(current.Labels, map[string]string{deleteConfigMapLabel: "true"}),
+					Labels: helper.MergeLabels(current.Labels, map[string]string{deleteConfigMapLabel: "true"}),
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to turn the delete expression on")
 				gateOnGeneration := gateOn.Generation
@@ -250,7 +250,7 @@ var _ = ginkgo.Describe(
 				current, err = h.Client.GetCluster(ctx, clusterID)
 				Expect(err).NotTo(HaveOccurred(), "failed to get cluster %s", clusterID)
 				gateOff, err := h.Client.PatchCluster(ctx, clusterID, client.ResourcePatchRequest{
-					Labels: client.MergeLabels(current.Labels, map[string]string{deleteConfigMapLabel: "false"}),
+					Labels: helper.MergeLabels(current.Labels, map[string]string{deleteConfigMapLabel: "false"}),
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to turn the delete expression off")
 				gateOffGeneration := gateOff.Generation
