@@ -8,10 +8,10 @@ import (
 func TestMergeLabels(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name    string
 		current map[string]string
 		labels  map[string]string
 		want    map[string]string
+		name    string
 	}{
 		{
 			name:    "merges and overwrites",

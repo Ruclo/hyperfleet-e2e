@@ -51,7 +51,8 @@ func reapplyNamespace(clusterID string) string {
 // report, and nothing is applied onto the terminating object — and the
 // object must be recreated with a new UID only after the applier confirms
 // the delete.
-var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - Delete then Reapply through the Applier",
+var _ = ginkgo.Describe(
+	"[Suite: adapter][remote-transport] Adapter Framework - Delete then Reapply through the Applier",
 	ginkgo.Serial,
 	ginkgo.Label(labels.Tier1, labels.Adapter),
 	func() {
@@ -77,8 +78,8 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 			})
 			Expect(err).NotTo(HaveOccurred(), "failed to clone adapter Helm chart")
 			ginkgo.DeferCleanup(func(ctx context.Context) {
-				if err := cleanupAdapterChart(); err != nil {
-					ginkgo.GinkgoWriter.Printf("Warning: failed to cleanup adapter chart: %v\n", err)
+				if cleanupErr := cleanupAdapterChart(); cleanupErr != nil {
+					ginkgo.GinkgoWriter.Printf("Warning: failed to cleanup adapter chart: %v\n", cleanupErr)
 				}
 			})
 
@@ -120,8 +121,8 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 					map[string]string{desireStoreClientPodLabel: "true"})
 				Expect(err).NotTo(HaveOccurred(), "failed to admit the adapter to the desire store")
 				ginkgo.DeferCleanup(func(ctx context.Context) {
-					if err := restoreStorePolicy(ctx); err != nil {
-						ginkgo.GinkgoWriter.Printf("Warning: failed to restore the desire store NetworkPolicy: %v\n", err)
+					if restoreErr := restoreStorePolicy(ctx); restoreErr != nil {
+						ginkgo.GinkgoWriter.Printf("Warning: failed to restore the desire store NetworkPolicy: %v\n", restoreErr)
 					}
 				})
 
@@ -136,13 +137,13 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				err = h.DeployAdapter(ctx, deployOpts)
 				ginkgo.DeferCleanup(func(ctx context.Context) {
 					ginkgo.By("uninstalling the reapply adapter")
-					if err := h.UninstallAdapter(ctx, releaseName, h.Cfg.Namespace); err != nil {
-						ginkgo.GinkgoWriter.Printf("Warning: failed to uninstall adapter %s: %v\n", releaseName, err)
+					if uninstallErr := h.UninstallAdapter(ctx, releaseName, h.Cfg.Namespace); uninstallErr != nil {
+						ginkgo.GinkgoWriter.Printf("Warning: failed to uninstall adapter %s: %v\n", releaseName, uninstallErr)
 					}
 					if h.Cfg.BrokerType == "googlepubsub" {
-						if err := h.DeletePubSubResourcesForAdapter(ctx, deployOpts.Entity, reapplyAdapterName); err != nil {
+						if pubsubErr := h.DeletePubSubResourcesForAdapter(ctx, deployOpts.Entity, reapplyAdapterName); pubsubErr != nil {
 							ginkgo.GinkgoWriter.Printf("Warning: failed to delete Pub/Sub resources for adapter %s: %v\n",
-								reapplyAdapterName, err)
+								reapplyAdapterName, pubsubErr)
 						}
 					}
 				})
@@ -152,8 +153,10 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				originalAdapters := h.GetAPIRequiredAdapters(deployOpts.Entity)
 				updatedAdapters := append(append([]string{}, originalAdapters...), reapplyAdapterName)
 				ginkgo.DeferCleanup(func(ctx context.Context) {
-					if err := h.RestoreAPIRequiredAdaptersWithRetry(ctx, deployOpts.Entity, apiChartPath, h.Cfg.Namespace, originalAdapters, 3); err != nil {
-						ginkgo.GinkgoWriter.Printf("CRITICAL: %v\n", err)
+					restoreErr := h.RestoreAPIRequiredAdaptersWithRetry(
+						ctx, deployOpts.Entity, apiChartPath, h.Cfg.Namespace, originalAdapters, 3)
+					if restoreErr != nil {
+						ginkgo.GinkgoWriter.Printf("CRITICAL: %v\n", restoreErr)
 					}
 				})
 				Expect(h.UpgradeAPIRequiredAdapters(ctx, deployOpts.Entity, apiChartPath, h.Cfg.Namespace, updatedAdapters)).
@@ -162,23 +165,31 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				ginkgo.By("creating a cluster")
 				cluster, err := h.Client.CreateClusterFromPayload(ctx, h.TestDataPath("payloads/clusters/cluster-request.json"))
 				Expect(err).NotTo(HaveOccurred(), "failed to create cluster")
-				Expect(cluster.Id).NotTo(BeNil(), "cluster ID should be generated")
-				clusterID := *cluster.Id
+				Expect(cluster.ID).NotTo(BeNil(), "cluster ID should be generated")
+				clusterID := *cluster.ID
 				ginkgo.GinkgoWriter.Printf("Created cluster ID: %s, Name: %s\n", clusterID, cluster.Name)
 				ginkgo.DeferCleanup(func(ctx context.Context) {
-					if err := h.CleanupTestResource(ctx, deployOpts.Entity, "", clusterID); err != nil {
-						ginkgo.GinkgoWriter.Printf("Warning: failed to cleanup cluster %s: %v\n", clusterID, err)
+					if cleanupErr := h.CleanupTestResource(ctx, deployOpts.Entity, "", clusterID); cleanupErr != nil {
+						ginkgo.GinkgoWriter.Printf("Warning: failed to cleanup cluster %s: %v\n", clusterID, cleanupErr)
 					}
 				})
 				createGeneration := cluster.Generation
 				Expect(createGeneration).To(Equal(int32(1)), "a new cluster should have generation 1")
 
 				ginkgo.By("waiting for the cluster to become Reconciled")
-				Eventually(h.Poll(ctx, h.Entities.MustGet("Cluster"), "", clusterID), h.Cfg.Timeouts.Cluster.Reconciled, h.Cfg.Polling.Interval).
+				Eventually(
+					h.Poll(ctx, h.Entities.MustGet("Cluster"), "", clusterID),
+					h.Entities.MustGet("Cluster").Timeouts.Reconciled,
+					h.Cfg.Polling.Interval,
+				).
 					Should(helper.HaveResourceCondition(client.ConditionTypeReconciled, client.ResourceConditionStatusTrue))
 
 				ginkgo.By("verifying the adapter reports its objects applied at the initial generation")
-				Eventually(h.PollAdapterStatuses(ctx, h.Entities.MustGet("Cluster"), "", clusterID), h.Cfg.Timeouts.Adapter.Processing, h.Cfg.Polling.Interval).
+				Eventually(
+					h.PollAdapterStatuses(ctx, h.Entities.MustGet("Cluster"), "", clusterID),
+					h.Cfg.Timeouts.Adapter.Processing,
+					h.Cfg.Polling.Interval,
+				).
 					Should(helper.HaveAllAdaptersAtGeneration([]string{reapplyAdapterName}, createGeneration))
 
 				ginkgo.By("verifying the applier created the adapter's objects")
@@ -204,11 +215,11 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				// not there is a no-op. The patches are shared with the other
 				// remote-transport spec.
 				ginkgo.DeferCleanup(func(ctx context.Context) {
-					_, err := configMaps.Patch(ctx, reapplyConfigMapName, types.StrategicMergePatchType,
+					_, patchErr := configMaps.Patch(ctx, reapplyConfigMapName, types.StrategicMergePatchType,
 						removeHoldFinalizerPatch, metav1.PatchOptions{})
-					if err != nil && !apierrors.IsNotFound(err) {
+					if patchErr != nil && !apierrors.IsNotFound(patchErr) {
 						ginkgo.GinkgoWriter.Printf("Warning: failed to remove finalizer %s from ConfigMap %s/%s: %v\n",
-							remoteHoldFinalizer, remote, reapplyConfigMapName, err)
+							remoteHoldFinalizer, remote, reapplyConfigMapName, patchErr)
 					}
 				})
 				_, err = configMaps.Patch(ctx, reapplyConfigMapName, types.StrategicMergePatchType,
@@ -229,8 +240,8 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 
 				ginkgo.By("waiting for the applier to delete the held ConfigMap")
 				Eventually(func(g Gomega) {
-					held, err := h.K8sClient.FetchConfigMap(ctx, remote, reapplyConfigMapName)
-					g.Expect(err).NotTo(HaveOccurred())
+					held, fetchErr := h.K8sClient.FetchConfigMap(ctx, remote, reapplyConfigMapName)
+					g.Expect(fetchErr).NotTo(HaveOccurred())
 					g.Expect(held.DeletionTimestamp).NotTo(BeNil(),
 						"ConfigMap %s/%s should be marked for deletion", remote, reapplyConfigMapName)
 				}, h.Cfg.Timeouts.Adapter.Processing, h.Cfg.Polling.Interval).Should(Succeed())
@@ -253,8 +264,8 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				// row reaching the gate-off generation with Available=False is
 				// the direct proof that the adapter processed the event
 				Eventually(func(g Gomega) {
-					statuses, err := h.Client.GetClusterStatuses(ctx, clusterID)
-					g.Expect(err).NotTo(HaveOccurred(), "failed to get cluster statuses")
+					statuses, statusErr := h.Client.GetClusterStatuses(ctx, clusterID)
+					g.Expect(statusErr).NotTo(HaveOccurred(), "failed to get cluster statuses")
 					i := slices.IndexFunc(statuses.Items, func(s client.AdapterStatus) bool {
 						return s.Adapter == reapplyAdapterName
 					})
@@ -280,17 +291,18 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				// at least one full adapter cycle runs while the finalizer
 				// still holds the evidence.
 				Consistently(func(g Gomega) {
-					held, err := h.K8sClient.FetchConfigMap(ctx, remote, reapplyConfigMapName)
-					g.Expect(err).NotTo(HaveOccurred())
+					held, fetchErr := h.K8sClient.FetchConfigMap(ctx, remote, reapplyConfigMapName)
+					g.Expect(fetchErr).NotTo(HaveOccurred())
 					g.Expect(held.UID).To(Equal(heldUID),
 						"ConfigMap %s/%s must keep its UID while the delete is pending", remote, reapplyConfigMapName)
 					g.Expect(held.DeletionTimestamp).NotTo(BeNil(),
 						"ConfigMap %s/%s must stay held in deletion", remote, reapplyConfigMapName)
 					g.Expect(held.Annotations).To(HaveKeyWithValue(client.KeyGeneration, wantGeneration),
-						"the held ConfigMap must keep the pre-delete content; generation %s means it was reapplied onto the terminating object", wantGeneration)
+						"the held ConfigMap must keep the pre-delete content; generation %s means it was "+
+							"reapplied onto the terminating object", wantGeneration)
 
-					statuses, err := h.Client.GetClusterStatuses(ctx, clusterID)
-					g.Expect(err).NotTo(HaveOccurred())
+					statuses, statusErr := h.Client.GetClusterStatuses(ctx, clusterID)
+					g.Expect(statusErr).NotTo(HaveOccurred())
 					i := slices.IndexFunc(statuses.Items, func(s client.AdapterStatus) bool {
 						return s.Adapter == reapplyAdapterName
 					})
@@ -305,8 +317,8 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 						client.ConditionTypeAvailable, client.AdapterConditionStatusFalse)).To(BeTrue(),
 						"adapter %s must keep reporting Available=False while the delete is pending", reapplyAdapterName)
 
-					cl, err := h.Client.GetCluster(ctx, clusterID)
-					g.Expect(err).NotTo(HaveOccurred())
+					cl, clusterErr := h.Client.GetCluster(ctx, clusterID)
+					g.Expect(clusterErr).NotTo(HaveOccurred())
 					g.Expect(h.HasResourceCondition(cl.Status.Conditions,
 						client.ConditionTypeReconciled, client.ResourceConditionStatusTrue)).To(BeFalse(),
 						"cluster %s must not be Reconciled while the delete is pending", clusterID)
@@ -319,7 +331,11 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 					remoteHoldFinalizer, remote, reapplyConfigMapName)
 
 				ginkgo.By("waiting for the adapter to reapply the ConfigMap and report at the new generation")
-				Eventually(h.PollAdapterStatuses(ctx, h.Entities.MustGet("Cluster"), "", clusterID), h.Cfg.Timeouts.Cluster.Reconciled, h.Cfg.Polling.Interval).
+				Eventually(
+					h.PollAdapterStatuses(ctx, h.Entities.MustGet("Cluster"), "", clusterID),
+					h.Entities.MustGet("Cluster").Timeouts.Reconciled,
+					h.Cfg.Polling.Interval,
+				).
 					Should(helper.HaveAllAdaptersAtGeneration([]string{reapplyAdapterName}, gateOffGeneration))
 
 				ginkgo.By("verifying the ConfigMap was recreated with a new UID and the new content")
@@ -333,7 +349,11 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				Expect(recreated.Data).To(HaveKeyWithValue("cluster_id", clusterID))
 
 				ginkgo.By("waiting for the cluster to become Reconciled")
-				Eventually(h.Poll(ctx, h.Entities.MustGet("Cluster"), "", clusterID), h.Cfg.Timeouts.Cluster.Reconciled, h.Cfg.Polling.Interval).
+				Eventually(
+					h.Poll(ctx, h.Entities.MustGet("Cluster"), "", clusterID),
+					h.Entities.MustGet("Cluster").Timeouts.Reconciled,
+					h.Cfg.Polling.Interval,
+				).
 					Should(helper.HaveResourceCondition(client.ConditionTypeReconciled, client.ResourceConditionStatusTrue))
 
 				ginkgo.By("verifying the namespace was not deleted and recreated with a new UID")
