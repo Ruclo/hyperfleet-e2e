@@ -47,9 +47,10 @@ func reapplyNamespace(clusterID string) string {
 // The delete-then-reapply path: a remote object is deleted, held by a
 // finalizer, and wanted back before the delete is confirmed. The store must
 // refuse the new apply while the DeleteDesire is unconfirmed — the adapter
-// reports Available=Unknown, the API discards those reports, and the adapter
-// never reaches the new generation — and the object must be recreated with a
-// new UID only after the applier confirms the delete.
+// reports Available=False at the gate-off generation, the API accepts the
+// report, and nothing is applied onto the terminating object — and the
+// object must be recreated with a new UID only after the applier confirms
+// the delete.
 var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - Delete then Reapply through the Applier",
 	ginkgo.Serial,
 	ginkgo.Label(labels.Tier1, labels.Adapter),
@@ -187,6 +188,7 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				Expect(err).NotTo(HaveOccurred(), "Namespace %s should exist", remote)
 				Expect(namespace.Labels).To(HaveKeyWithValue(client.KeyClusterID, clusterID))
 				Expect(namespace.Annotations).To(HaveKeyWithValue(client.KeyGeneration, wantGeneration))
+				namespaceUID := namespace.UID
 				configMap, err := h.GetConfigMap(ctx, remote, reapplyConfigMapName)
 				Expect(err).NotTo(HaveOccurred(), "ConfigMap %s/%s should exist", remote, reapplyConfigMapName)
 				Expect(configMap.Annotations).To(HaveKeyWithValue(client.KeyGeneration, wantGeneration))
@@ -260,6 +262,10 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 					g.Expect(statuses.Items[i].ObservedGeneration).To(Equal(gateOffGeneration),
 						"adapter %s should report at generation %d", reapplyAdapterName, gateOffGeneration)
 					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
+						client.ConditionTypeApplied, client.AdapterConditionStatusFalse)).To(BeTrue(),
+						"adapter %s should report Applied=False at generation %d while the delete is pending",
+						reapplyAdapterName, gateOffGeneration)
+					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
 						client.ConditionTypeAvailable, client.AdapterConditionStatusFalse)).To(BeTrue(),
 						"adapter %s should report Available=False at generation %d while the delete is pending",
 						reapplyAdapterName, gateOffGeneration)
@@ -292,6 +298,9 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 					g.Expect(statuses.Items[i].ObservedGeneration).To(Equal(gateOffGeneration),
 						"adapter %s's stored status must stay at generation %d while the delete is pending",
 						reapplyAdapterName, gateOffGeneration)
+					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
+						client.ConditionTypeApplied, client.AdapterConditionStatusFalse)).To(BeTrue(),
+						"adapter %s must keep reporting Applied=False while the delete is pending", reapplyAdapterName)
 					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
 						client.ConditionTypeAvailable, client.AdapterConditionStatusFalse)).To(BeTrue(),
 						"adapter %s must keep reporting Available=False while the delete is pending", reapplyAdapterName)
@@ -326,6 +335,12 @@ var _ = ginkgo.Describe("[Suite: adapter][remote-transport] Adapter Framework - 
 				ginkgo.By("waiting for the cluster to become Reconciled")
 				Eventually(h.Poll(ctx, h.Entities.MustGet("Cluster"), "", clusterID), h.Cfg.Timeouts.Cluster.Reconciled, h.Cfg.Polling.Interval).
 					Should(helper.HaveResourceCondition(client.ConditionTypeReconciled, client.ResourceConditionStatusTrue))
+
+				ginkgo.By("verifying the namespace was not deleted and recreated with a new UID")
+				finalNamespace, err := h.GetNamespace(ctx, remote)
+				Expect(err).NotTo(HaveOccurred(), "Namespace %s should still exist", remote)
+				Expect(finalNamespace.UID).To(Equal(namespaceUID),
+					"Namespace %s must keep its UID throughout: the label gate must not leak into its delete expression", remote)
 			})
 	},
 )
