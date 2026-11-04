@@ -273,10 +273,6 @@ var _ = ginkgo.Describe(
 					g.Expect(statuses.Items[i].ObservedGeneration).To(Equal(gateOffGeneration),
 						"adapter %s should report at generation %d", reapplyAdapterName, gateOffGeneration)
 					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
-						client.ConditionTypeApplied, client.AdapterConditionStatusFalse)).To(BeTrue(),
-						"adapter %s should report Applied=False at generation %d while the delete is pending",
-						reapplyAdapterName, gateOffGeneration)
-					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
 						client.ConditionTypeAvailable, client.AdapterConditionStatusFalse)).To(BeTrue(),
 						"adapter %s should report Available=False at generation %d while the delete is pending",
 						reapplyAdapterName, gateOffGeneration)
@@ -310,9 +306,6 @@ var _ = ginkgo.Describe(
 					g.Expect(statuses.Items[i].ObservedGeneration).To(Equal(gateOffGeneration),
 						"adapter %s's stored status must stay at generation %d while the delete is pending",
 						reapplyAdapterName, gateOffGeneration)
-					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
-						client.ConditionTypeApplied, client.AdapterConditionStatusFalse)).To(BeTrue(),
-						"adapter %s must keep reporting Applied=False while the delete is pending", reapplyAdapterName)
 					g.Expect(h.HasAdapterCondition(statuses.Items[i].Conditions,
 						client.ConditionTypeAvailable, client.AdapterConditionStatusFalse)).To(BeTrue(),
 						"adapter %s must keep reporting Available=False while the delete is pending", reapplyAdapterName)

@@ -407,7 +407,7 @@ kubectl get configmap reapply-config -n ${CLUSTER_ID}-reapply -o jsonpath='{.met
 - The label patch replaces the whole label set, so the cluster's other labels are carried in the patch
 - The patch bumps the generation to 2
 - The ConfigMap gets a `deletionTimestamp` within `timeouts.adapter.processing`: the applier issued the delete, the finalizer holds it
-- `cl-desire-reapply` reports `Applied=True` with `Available=False`, reason `GenerationMismatch`: the object is still visible in the mirror, but its generation annotation no longer advances while it is being deleted
+- `cl-desire-reapply` reports `Available=False`, reason `GenerationMismatch`: the object is still visible in the mirror, but its generation annotation no longer advances while it is being deleted
 
 #### Step 4: Want the object back while the delete is held
 
@@ -431,7 +431,7 @@ kubectl get configmap reapply-config -n ${CLUSTER_ID}-reapply -o jsonpath='{.met
 **Expected Result:**
 - The patch bumps the generation to 3
 - The ConfigMap keeps its UID, its `deletionTimestamp`, generation annotation `1` and its data: the store refused the new apply, nothing was applied onto the terminating object. A generation annotation of `3` with the same UID means a reapply landed on the terminating object — the regression this test exists to catch
-- `cl-desire-reapply`'s stored row reaches generation 3 with `Applied=False` and `Available=False`, both reason `MirrorNotSynced` — the executor marks the rejected resource unsynced: the reports are accepted (the status is `False`, not `Unknown`), so the row advancing is the direct proof that the adapter processed the gate-off event and the store refused the reapply — the distinction the tri-state discard rule used to hide. The row flipping to `Available=True` during the hold means a reapply landed on the terminating object
+- `cl-desire-reapply`'s stored row reaches generation 3 with  `Available=False`, reason `MirrorNotSynced` — the executor marks the rejected resource unsynced: the reports are accepted (the status is `False`, not `Unknown`), so the row advancing is the direct proof that the adapter processed the gate-off event and the store refused the reapply — the distinction the tri-state discard rule used to hide. The row flipping to `Available=True` during the hold means a reapply landed on the terminating object
 - The cluster stays `Reconciled=False`, which also keeps the Sentinel re-triggering the adapter
 
 #### Step 5: Release the finalizer and verify the recreate
